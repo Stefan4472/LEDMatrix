@@ -1,0 +1,209 @@
+<script>
+	var xhr=new XMLHttpRequest();
+	function send_frame(frame) {
+		xhr.open('GET','http://192.168.4.1/cc?pixels='+frame,true);
+		xhr.send();
+	}
+	function send_brightness(brightness) {
+		xhr.open('GET','http://192.168.4.1/cc?brightness='+brightness,true);
+		xhr.send();
+	}
+    function color2hex(c) {
+        function hex(x) { return ('0' + parseInt(x).toString(16)).slice(-2); }
+ 		 return '' + hex((c>>16)&0xFF) + hex((c>>8)&0xFF) + hex(c&0xFF);
+    }
+    function pixels2frame(pixels) {
+        var comm='',r,c;
+        for(r=0;r<7;r++) {
+            for(c=0;c<5;c++) {
+                comm+=color2hex(pixels[r][c].color);
+            }
+        }
+        return comm;
+    }
+  
+    // 2D array storing pixel values
+    var pixels=
+      [
+          [{color: 0, moving: false},{color: 0, moving: false},{color: 0, moving: false},{color: 0, moving: false},{color: 0, moving: false}],
+          [{color: 0, moving: false},{color: 0, moving: false},{color: 0, moving: false},{color: 0, moving: false},{color: 0, moving: false}],
+          [{color: 0, moving: false},{color: 0, moving: false},{color: 0, moving: false},{color: 0, moving: false},{color: 0, moving: false}],
+          [{color: 0, moving: false},{color: 0, moving: false},{color: 0, moving: false},{color: 0, moving: false},{color: 0, moving: false}],
+          [{color: 0, moving: false},{color: 0, moving: false},{color: 0, moving: false},{color: 0, moving: false},{color: 0, moving: false}],
+          [{color: 0, moving: false},{color: 0, moving: false},{color: 0, moving: false},{color: 0, moving: false},{color: 0, moving: false}],
+          [{color: 0, moving: false},{color: 0, moving: false},{color: 0, moving: false},{color: 0, moving: false},{color: 0, moving: false}]
+      ];
+    
+    
+    // available colors
+    var palette = [0x2980B9, 0xF1C40F, 0x8E44AD];
+    
+    // main animate loop
+    function animate() {
+        document.write("Calling animate<br>");
+        if (isActive()) {
+            updateMoving();
+            moveJewels();
+            removeClusters();
+            addJewel();
+            printPixels();
+        }
+        send_frame(pixels2frame(pixels)); // send frames
+    }
+    
+    // updates moving values of jewels
+    function updateMoving() {
+        for (var r = 6; r >= 0; r--) {
+            for (var c = 0; c < 5; c++) {
+                if (pixels[r][c].color != 0) {
+                    if (r == 6) { // bottom row, moving = false
+                        pixels[r][c].moving = false;
+                    } else if (pixels[r + 1][c].color == 0) { // empty space below, moving will be true
+                        pixels[r][c].moving = true;
+                    } else { // set moving to val of jewel below
+                        pixels[r][c].moving = pixels[r + 1][c].moving;
+                    } 
+                }
+            }
+        }
+    }
+    
+    // moves jewels based on moving values
+    function moveJewels() {
+        for (var r = 6; r > 0; r--) {
+            for (var c = 0; c < 5; c++) {
+                if (pixels[r - 1][c].moving) { // pixel above is moving-move it down
+                    if (pixels[r][c].color != 0) {
+                        document.write("Error: Jewel is being destroyed");
+                    }
+                    pixels[r][c].color = pixels[r - 1][c].color;
+                    pixels[r][c].moving = pixels[r - 1][c].moving;
+                    pixels[r - 1][c].color = 0;
+                    pixels[r - 1][c].moving = false;  
+                }
+            }
+        }
+    }
+    
+    // finds and removes three-in-a-row of the same color
+    function removeClusters() {
+        document.write("Removing clusters<br>");
+        var pixels_copy = new Array();
+        // copy data from pixels
+        for (var r = 0; r < pixels.length; r++) {
+            var current_row = new Array();
+            for (var c = 0; c < pixels[0].length; c++) {
+                current_row.push({color: pixels[r][c].color, moving: pixels[r][c].moving});
+            }
+            pixels_copy.push(current_row);
+        }
+        var current_cluster = new Array();
+        var to_remove;
+        for (var r = 6; r >= 0; r--) {
+            for (var c = 0; c < 5; c++) {
+                if (pixels_copy[r][c].color != 0 && !pixels_copy[r][c].moving) {
+                    shapeFill(r, c, pixels_copy[r][c], pixels_copy, current_cluster);
+                    if (current_cluster.length >= 3) { // if area >= 3, a cluster has been found. Clear the corresponding jewels in pixels[][]
+                        document.write("Cluster of length " + current_cluster.length + " found with color " + current_cluster[0].color + "<br>");
+                        while (current_cluster.length > 0) {
+                            to_remove = current_cluster.pop();
+                            pixels[to_remove.row][to_remove.col].color = 0;
+                            pixels[to_remove.row][to_remove.col].moving = false;
+                        }
+                    }
+                    current_cluster.splice(0, current_cluster.length); // clear array 
+                }
+            }
+        }
+    }
+    
+    // recursive shape fill of same-colored pixels
+    function shapeFill(row, col, jewel, pixelsCopy, coordinates) {
+        if (!jewel.moving && jewel.color != 0) { // only operate on settled jewels
+            coordinates.push({row:row, col:col}); // add coordinates to the list
+            var color = jewel.color; // save a copy of the color
+            pixelsCopy[row][col].color = 0; // set this to zero todo: would jewel.color=0 have the same effect?
+            if (col > 0 && pixelsCopy[row][col - 1].color == color) { // search left
+                shapeFill(row, col - 1, pixelsCopy[row][col - 1], pixelsCopy, coordinates);
+            } 
+            if (col < 4 && pixelsCopy[row][col + 1].color == color) { // search right
+                shapeFill(row, col + 1, pixelsCopy[row][col + 1], pixelsCopy, coordinates);
+            } 
+            if (row > 0 && pixelsCopy[row - 1][col].color == color) { // search up
+                shapeFill(row - 1, col, pixelsCopy[row - 1][col], pixelsCopy, coordinates);
+            } 
+            if (row < 6 && pixelsCopy[row + 1][col].color == color) { // search down
+                shapeFill(row + 1, col, pixelsCopy[row + 1][col], pixelsCopy, coordinates);
+            }   
+        }
+    }
+        
+    // returns whether matrix is active i.e. there are empty pixels or moving jewels
+    function isActive() {
+        for (var r = 0; r < pixels.length; r++) {
+            for (var c = 0; c < 5; c++) {
+                if (pixels[r][c].color == 0 || pixels[r][c].moving) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+    
+    // prints the pixel for debugging
+    function printPixels() {
+        for (var r = 0; r < 7; r++) {
+            for (var c = 0; c < 5; c++) {
+                document.write("[");
+                switch (pixels[r][c].color) {
+                    case 0:
+                        document.write("0");
+                        break;
+                    case palette[0]:
+                        document.write("A");
+                        break;
+                    case palette[1]:
+                        document.write("B");
+                        break;
+                    case palette[2]:
+                        document.write("C");
+                        break;
+                    default:
+                        document.write("ERR");
+                        break;
+                }
+                document.write(",");
+                if (pixels[r][c].moving) {
+                    document.write(1);
+                } else {
+                    document.write(0);
+                }
+                document.write("]");
+            }
+            document.write("<br>");
+        }
+    }
+    
+    // adds a jewel into a random available column
+    function addJewel() {
+        // randomly choose the column for a new jewel
+        var col = Math.floor(Math.random() * 5);
+        var col_counter = 1;
+        // if the column is full keep going until you find a column with space
+        // or you all columns have been found to be full, in which case do not add
+        while (col_counter < 5 && pixels[0][col].color != 0) {
+            col = (col + 1) % 5;
+            col_counter++;
+        }
+        if (col_counter < 5) {
+            document.write("Inserting new jewel at " + col + "<br>");
+            pixels[0][col].color = palette[Math.floor(Math.random() * palette.length)];
+            pixels[0][col].moving = false;
+        } else {
+            document.write("No empty column found");
+        }
+    }
+        
+    setInterval(animate, 500);	// 1000ms interval
+
+</script>

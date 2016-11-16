@@ -1,0 +1,90 @@
+<script>
+	var xhr=new XMLHttpRequest();
+	function send_frame(frame) {
+		xhr.open('GET','http://192.168.4.1/cc?pixels='+frame,true);
+		xhr.send();
+	}
+	function send_brightness(brightness) {
+		xhr.open('GET','http://192.168.4.1/cc?brightness='+brightness,true);
+		xhr.send();
+	}
+  function color2hex(c) {
+    function hex(x) { return ('0' + parseInt(x).toString(16)).slice(-2); }
+ 		return '' + hex((c>>16)&0xFF) + hex((c>>8)&0xFF) + hex(c&0xFF);
+  }
+  function pixels2frame(pixels) {
+  	var comm='',r,c;
+  	for(r=0;r<7;r++) {
+  		for(c=0;c<5;c++) {
+  			comm+=color2hex(pixels[r][c]);
+  		}
+  	}
+    return comm;
+  }
+  
+    // 2D array storing pixel values
+  var pixels=[[0,0,0,0,0],
+              [0,0,0,0,0],
+              [0,0,0,0,0],
+              [0,0,0,0,0],
+              [0,0,0,0,0],
+              [0,0,0,0,0],
+              [0,0,0,0,0]];
+    
+    
+    // available colors
+    //var palette = [0x2980B9, 0x1ABC9C, 0x27AE60, 0xF1C40F, 0xF1C40F, 0xE74C3C, 0x8E44AD];
+    var palette = [0x2980B9, 0x27AE60, 0xF1C40F, 0xE74C3C, 0x8E44AD];
+    // column to be "drained"
+    var to_clear = [false, false, false, false, false]; // array storing which columns to clear
+    var clear_counters = [0, 0, 0, 0, 0]; // num elements cleared per column
+    
+    // given the column index, checks if each row has a raindrop
+    function isColumnFull(column) {
+        var r;
+        for (r = 0; r < 7; r++) {
+            if (pixels[r][column] == 0) {
+                return false;
+            }
+        }
+        return true;
+    }
+        
+    function animate() {
+        // generate frames dynamically
+		var r, c;
+        // shift rows 0-5 down by starting from the bottom and moving up
+        // don't shift if the row below != 0
+		for(r = 6; r > 0; r--) {
+		  for(c = 0; c < 5; c++) {
+            if (pixels[r][c] == 0) {
+                pixels[r][c] = pixels[r - 1][c];
+                pixels[r - 1][c] = 0; // reset that pixel
+            }
+          }
+        }
+        // decide whether to create a new raindrop and if so randomly choose the column
+        var col = Math.floor(Math.random() * 5);
+        pixels[0][col] = palette[Math.random() * palette.length];
+        if (isColumnFull(col)) { // column will now be filled-set it to be cleared
+            to_clear[col] = true;
+        }
+        // make progress on clearing any columns that were full
+        for (c = 0; c < to_clear.length; c++) {
+            if (to_clear[c]) {
+                for (r = 0; r < clear_counters[c]; r++) { // clear rows from top to bottom
+                    pixels[r][c] = 0;
+                }
+                if (clear_counters[c] == 7) {
+                    to_clear[c] = false;
+                    clear_counters[c] = 0;
+                } else {
+                    clear_counters[c] += 1;
+                }
+            }        
+        }
+		send_frame(pixels2frame(pixels)); // send frames
+    }
+    setInterval(animate, 250);	// 100ms interval
+
+</script>
